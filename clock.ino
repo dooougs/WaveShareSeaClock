@@ -1104,6 +1104,10 @@ static inline void frameBufferHLine(
         *pixel++ = color;
 }
 
+static constexpr uint8_t BUBBLEGUM50_ROW_REFERENCE_FLAG = 0x80;
+static constexpr uint8_t BUBBLEGUM50_ROW_REFERENCE_SPAN_FLAG = 0x40;
+static constexpr uint8_t BUBBLEGUM50_ROW_REFERENCE_INDEX_MASK = 0x3F;
+
 static inline void decodeGlyphRleRow(
     const uint8_t *const *rowPtrs,
     const uint8_t *const *encodedRowPtrs,
@@ -1127,12 +1131,14 @@ static inline void decodeGlyphRleRow(
 
         uint8_t control = pgm_read_byte(rowData++);
 
-        if (control & 0x80)
+        if (control & BUBBLEGUM50_ROW_REFERENCE_FLAG)
         {
-            if (control & 0x40)
+            if (control & BUBBLEGUM50_ROW_REFERENCE_SPAN_FLAG)
                 rowData++;
 
-            int refRow = control & 0x3F;
+            int refRow =
+                control &
+                BUBBLEGUM50_ROW_REFERENCE_INDEX_MASK;
 
             if (refRow >= 0 &&
                 refRow < encodedRowCount)
@@ -1243,9 +1249,11 @@ void drawGlyph(
         uint8_t rowSpan = 1;
         bool invalidRow = false;
 
-        if (control & 0x80)
+        if (control & BUBBLEGUM50_ROW_REFERENCE_FLAG)
         {
-            if (control & 0x40)
+            // Bit 6 is reserved for the optional span byte, so
+            // reference rows address earlier encoded rows with 6 bits.
+            if (control & BUBBLEGUM50_ROW_REFERENCE_SPAN_FLAG)
             {
                 rowSpan = pgm_read_byte(scan++);
 

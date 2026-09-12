@@ -1129,6 +1129,9 @@ static inline void decodeGlyphRleRow(
 
         if (control & 0x80)
         {
+            if (control & 0x40)
+                rowData++;
+
             int refRow = control & 0x3F;
 
             if (refRow >= 0 &&

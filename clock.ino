@@ -1240,6 +1240,7 @@ void drawGlyph(
     const uint8_t *scan = data;
     int row = 0;
     int encodedRowCount = 0;
+    bool invalidGlyph = false;
 
     while (row < BUBBLEGUM50_HEIGHT &&
            encodedRowCount < BUBBLEGUM50_HEIGHT)
@@ -1269,8 +1270,8 @@ void drawGlyph(
 
         if (invalidRow)
         {
-            rowPtrs[row++] = nullptr;
-            continue;
+            invalidGlyph = true;
+            break;
         }
 
         // A span-encoded reference repeats the same decoded row.
@@ -1281,8 +1282,18 @@ void drawGlyph(
             rowPtrs[row++] = encodedRow;
     }
 
-    while (row < BUBBLEGUM50_HEIGHT)
-        rowPtrs[row++] = nullptr;
+    if (invalidGlyph)
+    {
+        encodedRowCount = 0;
+
+        for (row = 0; row < BUBBLEGUM50_HEIGHT; row++)
+            rowPtrs[row] = nullptr;
+    }
+    else
+    {
+        while (row < BUBBLEGUM50_HEIGHT)
+            rowPtrs[row++] = nullptr;
+    }
 
     uint8_t rowCacheA[BUBBLEGUM50_MAX_WIDTH];
     uint8_t rowCacheB[BUBBLEGUM50_MAX_WIDTH];

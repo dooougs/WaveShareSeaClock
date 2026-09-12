@@ -40,18 +40,6 @@ Adafruit_ST7789 tft(&SPI, TFT_CS, TFT_DC, TFT_RST);
 #define CLOCK_SIZE 100
 uint16_t char_width = 0;
 
-static uint8_t logo_dark_map[sizeof(logo_map)];
-
-void createDarkLogo()
-{
-    for (size_t i = 0; i < sizeof(logo_map); i++)
-    {
-        uint8_t b = pgm_read_byte(&logo_map[i]);
-
-        logo_dark_map[i] = (b == 0xFF) ? 0x00 : b;
-    }
-}
-
 void setup()
 {
     Serial.begin(115200);

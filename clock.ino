@@ -1105,11 +1105,41 @@ static inline void frameBufferHLine(
 }
 
 static inline void decodeGlyphRleRow(
-    const uint8_t *rowData,
+    const uint8_t *const *rowPtrs,
+    int rowIndex,
     int width,
     uint8_t *out)
 {
-    uint8_t runs = pgm_read_byte(rowData++);
+    if (rowIndex < 0 ||
+        rowIndex >= BUBBLEGUM50_HEIGHT)
+    {
+        memset(out, 0, width);
+        return;
+    }
+
+    const uint8_t *rowData = rowPtrs[rowIndex];
+    uint8_t control = pgm_read_byte(rowData++);
+
+    if (control & 0x80)
+    {
+        int refRow = control & 0x7F;
+
+        if (refRow >= 0 && refRow < rowIndex)
+        {
+            decodeGlyphRleRow(
+                rowPtrs,
+                refRow,
+                width,
+                out
+            );
+            return;
+        }
+
+        memset(out, 0, width);
+        return;
+    }
+
+    uint8_t runs = control;
     int x = 0;
 
     for (uint8_t i = 0; i < runs && x < width; i++)
@@ -1195,8 +1225,10 @@ void drawGlyph(
     for (int row = 0; row < BUBBLEGUM50_HEIGHT; row++)
     {
         rowPtrs[row] = scan;
-        uint8_t runs = pgm_read_byte(scan++);
-        scan += runs;
+        uint8_t control = pgm_read_byte(scan++);
+
+        if ((control & 0x80) == 0)
+            scan += control;
     }
 
     uint8_t rowCacheA[BUBBLEGUM50_MAX_WIDTH];
@@ -1261,7 +1293,8 @@ void drawGlyph(
             if (rowCacheAIndex != sy0)
             {
                 decodeGlyphRleRow(
-                    rowPtrs[sy0],
+                    rowPtrs,
+                    sy0,
                     width,
                     rowCacheA
                 );
@@ -1281,7 +1314,8 @@ void drawGlyph(
                 if (rowCacheBIndex != sy1)
                 {
                     decodeGlyphRleRow(
-                        rowPtrs[sy1],
+                        rowPtrs,
+                        sy1,
                         width,
                         rowCacheB
                     );

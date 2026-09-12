@@ -1260,6 +1260,9 @@ static const Bubblegum50Glyph Bubblegum50Glyphs[] PROGMEM = {
 
 static inline const Bubblegum50Glyph *bubblegum50GetGlyph(char c)
 {
+    if (c >= 'a' && c <= 'z')
+        c = (char)(c - ('a' - 'A'));
+
     if ((uint8_t)c < BUBBLEGUM50_FIRST_CHAR || (uint8_t)c > BUBBLEGUM50_LAST_CHAR)
         c = '?';
     return &Bubblegum50Glyphs[(uint8_t)c - BUBBLEGUM50_FIRST_CHAR];

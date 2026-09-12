@@ -1239,9 +1239,9 @@ void drawGlyph(
            encodedRowCount < BUBBLEGUM50_HEIGHT)
     {
         const uint8_t *encodedRow = scan;
-        encodedRowPtrs[encodedRowCount++] = encodedRow;
         uint8_t control = pgm_read_byte(scan++);
         uint8_t rowSpan = 1;
+        bool invalidRow = false;
 
         if (control & 0x80)
         {
@@ -1250,11 +1250,20 @@ void drawGlyph(
                 rowSpan = pgm_read_byte(scan++);
 
                 if (rowSpan == 0)
-                    break;
+                    invalidRow = true;
             }
         }
         else
             scan += control;
+
+        encodedRowPtrs[encodedRowCount++] =
+            invalidRow ? nullptr : encodedRow;
+
+        if (invalidRow)
+        {
+            rowPtrs[row++] = nullptr;
+            continue;
+        }
 
         for (uint8_t span = 0;
              span < rowSpan &&

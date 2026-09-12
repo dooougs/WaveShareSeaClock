@@ -1116,24 +1116,37 @@ static inline void frameBufferHLine(
         *pixel++ = color;
 }
 
-static inline bool glyphPixel(
-    const uint8_t *data,
+static inline void decodeGlyphRleRow(
+    const uint8_t *rowData,
     int width,
-    int bytesPerRow,
-    int x,
-    int y)
+    uint8_t *out)
 {
-    if (x < 0 || x >= width ||
-        y < 0 || y >= BUBBLEGUM50_HEIGHT)
-        return false;
+    uint8_t runs = pgm_read_byte(rowData++);
+    int x = 0;
 
-    uint8_t b = pgm_read_byte(
-        data +
-        y * bytesPerRow +
-        (x >> 3)
-    );
+    for (uint8_t i = 0; i < runs && x < width; i++)
+    {
+        uint8_t token = pgm_read_byte(rowData++);
+        bool on = token & 0x80;
+        int runLength = (token & 0x7F) + 1;
+        int end = min(width, x + runLength);
+        memset(out + x, on ? 255 : 0, end - x);
+        x = end;
+    }
 
-    return b & (0x80 >> (x & 7));
+    if (x < width)
+        memset(out + x, 0, width - x);
+}
+
+static inline uint8_t sampleDecodedGlyphRow(
+    const uint8_t *row,
+    int width,
+    int x)
+{
+    if (row == nullptr || x < 0 || x >= width)
+        return 0;
+
+    return row[x];
 }
 
 
@@ -1182,16 +1195,26 @@ void drawGlyph(
     const uint8_t *data =
         (const uint8_t *)pgm_read_ptr(&glyph->data);
 
-    int width =
-        pgm_read_byte(&glyph->width);
-
-    int bytesPerRow =
-        pgm_read_byte(&glyph->bytesPerRow);
+    int width = pgm_read_byte(&glyph->width);
 
     int scaledWidth =
         (width * height +
          BUBBLEGUM50_HEIGHT - 1) /
         BUBBLEGUM50_HEIGHT;
+
+    const uint8_t *rowPtrs[BUBBLEGUM50_HEIGHT];
+    const uint8_t *scan = data;
+    for (int row = 0; row < BUBBLEGUM50_HEIGHT; row++)
+    {
+        rowPtrs[row] = scan;
+        uint8_t runs = pgm_read_byte(scan++);
+        scan += runs;
+    }
+
+    uint8_t rowCacheA[BUBBLEGUM50_MAX_WIDTH];
+    uint8_t rowCacheB[BUBBLEGUM50_MAX_WIDTH];
+    int rowCacheAIndex = -1;
+    int rowCacheBIndex = -1;
 
 
     for (int dy = 0; dy < height; dy++)
@@ -1242,6 +1265,44 @@ void drawGlyph(
 
         uint8_t fy = sy & 0xFF;
 
+        const uint8_t *row0 = nullptr;
+        const uint8_t *row1 = nullptr;
+
+        if (sy0 >= 0 && sy0 < BUBBLEGUM50_HEIGHT)
+        {
+            if (rowCacheAIndex != sy0)
+            {
+                decodeGlyphRleRow(
+                    rowPtrs[sy0],
+                    width,
+                    rowCacheA
+                );
+                rowCacheAIndex = sy0;
+            }
+            row0 = rowCacheA;
+        }
+
+        if (sy1 >= 0 && sy1 < BUBBLEGUM50_HEIGHT)
+        {
+            if (sy1 == rowCacheAIndex)
+            {
+                row1 = rowCacheA;
+            }
+            else
+            {
+                if (rowCacheBIndex != sy1)
+                {
+                    decodeGlyphRleRow(
+                        rowPtrs[sy1],
+                        width,
+                        rowCacheB
+                    );
+                    rowCacheBIndex = sy1;
+                }
+                row1 = rowCacheB;
+            }
+        }
+
 
         for (int dx = 0;
              dx < scaledWidth;
@@ -1267,40 +1328,32 @@ void drawGlyph(
 
 
             int p00 =
-                glyphPixel(
-                    data,
+                sampleDecodedGlyphRow(
+                    row0,
                     width,
-                    bytesPerRow,
-                    sx0,
-                    sy0
-                ) ? 255 : 0;
+                    sx0
+                );
 
             int p10 =
-                glyphPixel(
-                    data,
+                sampleDecodedGlyphRow(
+                    row0,
                     width,
-                    bytesPerRow,
-                    sx1,
-                    sy0
-                ) ? 255 : 0;
+                    sx1
+                );
 
             int p01 =
-                glyphPixel(
-                    data,
+                sampleDecodedGlyphRow(
+                    row1,
                     width,
-                    bytesPerRow,
-                    sx0,
-                    sy1
-                ) ? 255 : 0;
+                    sx0
+                );
 
             int p11 =
-                glyphPixel(
-                    data,
+                sampleDecodedGlyphRow(
+                    row1,
                     width,
-                    bytesPerRow,
-                    sx1,
-                    sy1
-                ) ? 255 : 0;
+                    sx1
+                );
 
 
             /*

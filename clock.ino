@@ -1250,7 +1250,7 @@ void drawGlyph(
                 rowSpan = pgm_read_byte(scan++);
 
                 if (rowSpan == 0)
-                    rowSpan = 1;
+                    break;
             }
         }
         else

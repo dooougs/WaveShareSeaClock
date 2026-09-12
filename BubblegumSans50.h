@@ -17,6 +17,11 @@
 #define BUBBLEGUM50_BASELINE     82
 #define BUBBLEGUM50_MAX_WIDTH    78
 
+static_assert(
+    BUBBLEGUM50_MAX_WIDTH <= 127,
+    "Bubblegum row control bytes require at most 127 runs per row"
+);
+
 struct Bubblegum50Glyph
 {
     const uint8_t *data;

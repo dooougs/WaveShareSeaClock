@@ -1106,6 +1106,8 @@ static inline void frameBufferHLine(
 
 static inline void decodeGlyphRleRow(
     const uint8_t *const *rowPtrs,
+    const uint8_t *const *encodedRowPtrs,
+    int encodedRowCount,
     int rowIndex,
     int width,
     uint8_t *out)
@@ -1118,42 +1120,46 @@ static inline void decodeGlyphRleRow(
     }
 
     const uint8_t *rowData = rowPtrs[rowIndex];
-    uint8_t control = pgm_read_byte(rowData++);
-
-    if (control & 0x80)
+    for (int depth = 0; depth < encodedRowCount; depth++)
     {
-        int refRow = control & 0x7F;
+        if (rowData == nullptr)
+            break;
 
-        if (refRow >= 0 && refRow < rowIndex)
+        uint8_t control = pgm_read_byte(rowData++);
+
+        if (control & 0x80)
         {
-            decodeGlyphRleRow(
-                rowPtrs,
-                refRow,
-                width,
-                out
-            );
-            return;
+            int refRow = control & 0x3F;
+
+            if (refRow >= 0 &&
+                refRow < encodedRowCount)
+            {
+                rowData = encodedRowPtrs[refRow];
+                continue;
+            }
+
+            break;
         }
 
-        memset(out, 0, width);
+        uint8_t runs = control;
+        int x = 0;
+
+        for (uint8_t i = 0; i < runs && x < width; i++)
+        {
+            uint8_t token = pgm_read_byte(rowData++);
+            bool on = token & 0x80;
+            int runLength = (token & 0x7F) + 1;
+            int end = min(width, x + runLength);
+            memset(out + x, on ? 255 : 0, end - x);
+            x = end;
+        }
+
+        if (x < width)
+            memset(out + x, 0, width - x);
         return;
     }
 
-    uint8_t runs = control;
-    int x = 0;
-
-    for (uint8_t i = 0; i < runs && x < width; i++)
-    {
-        uint8_t token = pgm_read_byte(rowData++);
-        bool on = token & 0x80;
-        int runLength = (token & 0x7F) + 1;
-        int end = min(width, x + runLength);
-        memset(out + x, on ? 255 : 0, end - x);
-        x = end;
-    }
-
-    if (x < width)
-        memset(out + x, 0, width - x);
+    memset(out, 0, width);
 }
 
 static inline uint8_t sampleDecodedGlyphRow(
@@ -1221,15 +1227,41 @@ void drawGlyph(
         BUBBLEGUM50_HEIGHT;
 
     const uint8_t *rowPtrs[BUBBLEGUM50_HEIGHT];
+    const uint8_t *encodedRowPtrs[BUBBLEGUM50_HEIGHT];
     const uint8_t *scan = data;
-    for (int row = 0; row < BUBBLEGUM50_HEIGHT; row++)
-    {
-        rowPtrs[row] = scan;
-        uint8_t control = pgm_read_byte(scan++);
+    int row = 0;
+    int encodedRowCount = 0;
 
-        if ((control & 0x80) == 0)
+    while (row < BUBBLEGUM50_HEIGHT &&
+           encodedRowCount < BUBBLEGUM50_HEIGHT)
+    {
+        const uint8_t *encodedRow = scan;
+        encodedRowPtrs[encodedRowCount++] = encodedRow;
+        uint8_t control = pgm_read_byte(scan++);
+        uint8_t rowSpan = 1;
+
+        if (control & 0x80)
+        {
+            if (control & 0x40)
+            {
+                rowSpan = pgm_read_byte(scan++);
+
+                if (rowSpan == 0)
+                    rowSpan = 1;
+            }
+        }
+        else
             scan += control;
+
+        for (uint8_t span = 0;
+             span < rowSpan &&
+             row < BUBBLEGUM50_HEIGHT;
+             span++)
+            rowPtrs[row++] = encodedRow;
     }
+
+    while (row < BUBBLEGUM50_HEIGHT)
+        rowPtrs[row++] = nullptr;
 
     uint8_t rowCacheA[BUBBLEGUM50_MAX_WIDTH];
     uint8_t rowCacheB[BUBBLEGUM50_MAX_WIDTH];
@@ -1294,6 +1326,8 @@ void drawGlyph(
             {
                 decodeGlyphRleRow(
                     rowPtrs,
+                    encodedRowPtrs,
+                    encodedRowCount,
                     sy0,
                     width,
                     rowCacheA
@@ -1315,6 +1349,8 @@ void drawGlyph(
                 {
                     decodeGlyphRleRow(
                         rowPtrs,
+                        encodedRowPtrs,
+                        encodedRowCount,
                         sy1,
                         width,
                         rowCacheB

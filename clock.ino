@@ -1273,6 +1273,7 @@ void drawGlyph(
             continue;
         }
 
+        // A span-encoded reference repeats the same decoded row.
         for (uint8_t span = 0;
              span < rowSpan &&
              row < BUBBLEGUM50_HEIGHT;
